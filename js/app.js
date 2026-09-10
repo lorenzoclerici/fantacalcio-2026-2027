@@ -239,19 +239,34 @@
     list.sort((a, b) => {
       if (sort === "nome") return a.nome.localeCompare(b.nome, "it");
       if (sort === "quotazione") return (b.quotazione || 0) - (a.quotazione || 0);
+      if (sort === "pma") return (b.pma || 0) - (a.pma || 0);
       return (b.fvm504 || 0) - (a.fvm504 || 0);
     });
     return list;
   }
 
+  function suggestedPrice(p) {
+    return p.pma || p.fvm504 || p.quotazione || 1;
+  }
+
   function renderListone() {
     const taken = purchaseMap();
     const list = getFilteredPlayers();
-    $("#list-count").textContent = `${list.length} giocatori`;
+    const withPma = list.filter((p) => p.pma != null).length;
+    $("#list-count").textContent = `${list.length} giocatori · PMA su ${withPma}`;
+    const pmaMeta = DATA.meta.pma;
+    const note = $("#pma-note");
+    if (note && pmaMeta) {
+      note.innerHTML = `PMA: Classic ~10 · agg. ${escapeHtml(pmaMeta.aggiornato)} · <a href="${escapeAttr(pmaMeta.url)}" target="_blank" rel="noopener">fonte</a>`;
+    }
     $("#player-tbody").innerHTML = list
       .map((p) => {
         const buy = taken.get(p.id);
         const fc = fasciaClass(p.fascia);
+        const delta =
+          p.pma != null && p.fvm504 != null ? p.pma - p.fvm504 : null;
+        const deltaCls =
+          delta == null ? "" : delta > 5 ? "pma-hot" : delta < -5 ? "pma-cold" : "";
         return `
           <tr class="${buy ? "is-taken" : ""}">
             <td><span class="role-badge ${p.ruolo}">${p.ruolo}</span></td>
@@ -263,6 +278,11 @@
             <td>${escapeHtml(p.status || "—")}</td>
             <td>${p.quotazione ?? "—"}</td>
             <td><strong>${p.fvm504 ?? "—"}</strong></td>
+            <td class="pma-cell ${deltaCls}" title="${
+              delta == null
+                ? "PMA non disponibile"
+                : `PMA vs FVM: ${delta > 0 ? "+" : ""}${delta}`
+            }">${p.pma ?? "—"}</td>
             <td>${p.fascia ? `<span class="fascia ${fc}">${escapeHtml(p.fascia)}</span>` : "—"}</td>
             <td>
               ${
@@ -517,7 +537,7 @@
           <thead>
             <tr>
               <th>Ruolo</th><th>Calciatore</th><th>Pos</th><th>Status</th>
-              <th>Qt</th><th>FVM</th><th>Fascia</th><th>Consiglio</th><th></th>
+              <th>Qt</th><th>FVM</th><th>PMA</th><th>Fascia</th><th>Consiglio</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -526,6 +546,7 @@
                 const match = players.find((p) => p.nome === g.nome && p.squadra === team.nome);
                 const id = match?.id;
                 const buy = id ? taken.get(id) : null;
+                const pma = match?.pma;
                 return `
                   <tr class="${buy ? "is-taken" : ""}">
                     <td>${escapeHtml(g.ruolo)}</td>
@@ -534,6 +555,7 @@
                     <td>${escapeHtml(g.status || "—")}</td>
                     <td>${g.quotazione ?? "—"}</td>
                     <td>${g.fvm504 ?? "—"}</td>
+                    <td class="pma-cell">${pma ?? "—"}</td>
                     <td>${escapeHtml(g.fascia || "—")}</td>
                     <td style="max-width:260px;font-size:.8rem">${escapeHtml(g.consiglio || "—")}</td>
                     <td>
@@ -608,13 +630,14 @@
       <div class="tags">
         <span class="tag">Qt ${p.quotazione ?? "—"}</span>
         <span class="tag">FVM ${p.fvm504 ?? "—"}</span>
+        <span class="tag">PMA ${p.pma ?? "—"}</span>
         ${p.fascia ? `<span class="tag">${escapeHtml(p.fascia)}</span>` : ""}
         ${buy ? `<span class="tag">Già di ${escapeHtml(buy.owner)}</span>` : ""}
       </div>
     `;
     btn.disabled = Boolean(buy);
     if (!buy && !$("#buy-price").value) {
-      $("#buy-price").value = p.fvm504 || p.quotazione || 1;
+      $("#buy-price").value = suggestedPrice(p);
     }
     updateAssignHint();
   }
@@ -652,7 +675,7 @@
     $("#buy-search").value = p?.nome || "";
     $("#buy-suggestions").hidden = true;
     if (p && (!$("#buy-price").value || Number($("#buy-price").value) < 1)) {
-      $("#buy-price").value = p.fvm504 || p.quotazione || 1;
+      $("#buy-price").value = suggestedPrice(p);
     }
     renderSelected();
   }
@@ -723,7 +746,8 @@
       <p><strong>Squadra:</strong> ${escapeHtml(p.squadra)}</p>
       <p><strong>Ruolo:</strong> ${escapeHtml(ROLE_LABEL[p.ruolo])} (${escapeHtml(p.posizione || "—")})</p>
       <p><strong>Status:</strong> ${escapeHtml(p.status || "—")}</p>
-      <p><strong>Quotazione:</strong> ${p.quotazione ?? "—"} · <strong>FVM 504:</strong> ${p.fvm504 ?? "—"}</p>
+      <p><strong>Quotazione:</strong> ${p.quotazione ?? "—"} · <strong>FVM 504:</strong> ${p.fvm504 ?? "—"} · <strong>PMA:</strong> ${p.pma ?? "—"}</p>
+      <p class="empty-state" style="margin:0 0 .65rem;font-size:.8rem">PMA = prezzo medio asta Classic ~10 (fonte Fantacalcio-Online), scalato su 504 crediti.</p>
       <p><strong>Fascia:</strong> ${escapeHtml(p.fascia || "—")}</p>
       <p><strong>Specialità:</strong> ${escapeHtml(p.specialita || "—")}</p>
       <p><strong>Consiglio:</strong> ${escapeHtml(p.consiglio || "—")}</p>
@@ -767,7 +791,7 @@
         <li>
           <button type="button" data-id="${escapeAttr(p.id)}" class="${i === suggestionIndex ? "is-active" : ""}">
             <span>${escapeHtml(p.nome)}</span>
-            <span class="meta">${escapeHtml(p.squadra)} · ${p.ruolo} · ${p.fvm504 ?? "—"}</span>
+            <span class="meta">${escapeHtml(p.squadra)} · ${p.ruolo} · FVM ${p.fvm504 ?? "—"} · PMA ${p.pma ?? "—"}</span>
           </button>
         </li>`
       )

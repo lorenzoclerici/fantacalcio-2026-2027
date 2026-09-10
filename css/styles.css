@@ -454,6 +454,29 @@ select:focus {
   color: var(--muted);
   font-size: 0.85rem;
   margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pma-note a {
+  color: #b7a6ff;
+}
+
+.pma-cell {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+
+.pma-cell.pma-hot {
+  color: #ff8a7a;
+}
+
+.pma-cell.pma-cold {
+  color: #7ddea8;
 }
 
 .table-wrap {
