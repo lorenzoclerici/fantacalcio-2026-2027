@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Campo Asta · Fantacalcio 2026/27</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="app-bg" aria-hidden="true"></div>
+
+  <header class="nav-wrap">
+    <nav class="nav-pill" role="tablist">
+      <button class="nav-item is-active" data-view="rose" role="tab">
+        <span class="nav-ico jersey">👕</span>
+        <span>Rose Squadre</span>
+      </button>
+      <button class="nav-item" data-view="listone" role="tab">
+        <span class="nav-ico">📋</span>
+        <span>Listone</span>
+      </button>
+      <button class="nav-item" data-view="guide" role="tab">
+        <span class="nav-ico">📖</span>
+        <span>Guida Asta</span>
+      </button>
+      <button class="nav-item" data-view="riepilogo" role="tab">
+        <span class="nav-ico">📊</span>
+        <span>Recap Asta</span>
+      </button>
+    </nav>
+
+    <div class="nav-tools">
+      <button class="tool-btn" id="btn-undo" disabled title="Annulla ultimo">↶</button>
+      <button class="tool-btn" id="btn-export" title="Esporta">⬇</button>
+      <label class="tool-btn" title="Importa">
+        ⬆
+        <input type="file" id="input-import" accept="application/json,.json" hidden />
+      </label>
+      <button class="tool-btn danger" id="btn-reset" title="Reset">↺</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ROSE BOARD (main auction view) -->
+    <section class="view is-active" id="view-rose" data-view="rose">
+      <div class="board" id="roster-board"></div>
+    </section>
+
+    <!-- LISTONE -->
+    <section class="view" id="view-listone" data-view="listone">
+      <div class="panel">
+        <div class="listone-toolbar">
+          <label class="field grow">
+            <span>Cerca</span>
+            <input id="list-search" type="search" placeholder="Nome, squadra, specialità…" />
+          </label>
+          <label class="field">
+            <span>Ruolo</span>
+            <select id="list-role">
+              <option value="">Tutti</option>
+              <option value="P">Portieri</option>
+              <option value="D">Difensori</option>
+              <option value="C">Centrocampisti</option>
+              <option value="A">Attaccanti</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Stato</span>
+            <select id="list-availability">
+              <option value="liberi">Liberi</option>
+              <option value="tutti">Tutti</option>
+              <option value="presi">Presi</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Ordina</span>
+            <select id="list-sort">
+              <option value="fvm">FVM ↓</option>
+              <option value="quotazione">Quotazione ↓</option>
+              <option value="nome">Nome</option>
+            </select>
+          </label>
+        </div>
+        <div class="listone-meta">
+          <span id="list-count">0 giocatori</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>R</th>
+                <th>Calciatore</th>
+                <th>Squadra</th>
+                <th>Status</th>
+                <th>Qt</th>
+                <th>FVM</th>
+                <th>Fascia</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="player-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- GUIDE -->
+    <section class="view" id="view-guide" data-view="guide">
+      <div class="guide-layout">
+        <aside class="team-nav" id="team-nav"></aside>
+        <article class="panel guide-detail" id="guide-detail">
+          <p class="empty-state">Seleziona una squadra di Serie A</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- RECAP -->
+    <section class="view" id="view-riepilogo" data-view="riepilogo">
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Squadra</th>
+                <th>P</th>
+                <th>D</th>
+                <th>C</th>
+                <th>A</th>
+                <th>Speso</th>
+                <th>Rimasti</th>
+                <th>Max bid</th>
+                <th>Slot</th>
+              </tr>
+            </thead>
+            <tbody id="summary-tbody"></tbody>
+          </table>
+        </div>
+        <p class="footnote">Max bid = crediti rimasti − (slot liberi − 1). Rosa: 4P · 9D · 9C · 7A = 29.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Assign player dialog -->
+  <dialog id="assign-modal" class="modal">
+    <form method="dialog" class="modal-card" id="assign-form">
+      <header class="modal-head">
+        <div>
+          <p class="modal-kicker" id="assign-kicker">Nuovo acquisto</p>
+          <h2 id="assign-title">Assegna calciatore</h2>
+        </div>
+        <button value="cancel" class="icon-btn" type="submit" aria-label="Chiudi">×</button>
+      </header>
+      <div class="modal-body">
+        <label class="field">
+          <span>Fantallenatore</span>
+          <select id="buy-owner"></select>
+        </label>
+        <label class="field">
+          <span>Calciatore</span>
+          <div class="search-wrap">
+            <input id="buy-search" type="search" placeholder="Cerca giocatore…" autocomplete="off" />
+            <ul id="buy-suggestions" class="suggestions" hidden></ul>
+          </div>
+        </label>
+        <div id="selected-player" class="selected-player is-empty">
+          <p>Seleziona un giocatore</p>
+        </div>
+        <label class="field">
+          <span>Prezzo</span>
+          <input id="buy-price" type="number" min="1" step="1" placeholder="1" />
+        </label>
+        <p class="assign-hint" id="assign-hint"></p>
+      </div>
+      <footer class="modal-foot">
+        <button class="btn ghost" value="cancel" type="submit">Annulla</button>
+        <button class="btn primary" type="button" id="btn-buy" disabled>Conferma acquisto</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog id="player-modal" class="modal">
+    <form method="dialog" class="modal-card">
+      <header class="modal-head">
+        <h2 id="modal-title">Giocatore</h2>
+        <button value="cancel" class="icon-btn" aria-label="Chiudi">×</button>
+      </header>
+      <div id="modal-body" class="modal-body"></div>
+      <footer class="modal-foot">
+        <button class="btn ghost" value="cancel">Chiudi</button>
+        <button class="btn primary" type="button" id="modal-assign">Assegna</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="data/asta-data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
