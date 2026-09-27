@@ -13,6 +13,11 @@
   <div class="app-bg" aria-hidden="true"></div>
 
   <header class="nav-wrap">
+    <div class="mode-switch" role="group" aria-label="Modalità asta">
+      <button type="button" class="mode-btn is-active" data-mode="classic" id="mode-classic">Classic</button>
+      <button type="button" class="mode-btn" data-mode="mantra" id="mode-mantra">Mantra</button>
+    </div>
+
     <nav class="nav-pill" role="tablist">
       <button class="nav-item is-active" data-view="rose" role="tab">
         <span class="nav-ico jersey">👕</span>
@@ -21,6 +26,10 @@
       <button class="nav-item" data-view="listone" role="tab">
         <span class="nav-ico">📋</span>
         <span>Listone</span>
+      </button>
+      <button class="nav-item mantra-only" data-view="moduli" role="tab" hidden>
+        <span class="nav-ico">📐</span>
+        <span>Moduli</span>
       </button>
       <button class="nav-item" data-view="guide" role="tab">
         <span class="nav-ico">📖</span>
@@ -53,37 +62,51 @@
     <section class="view" id="view-listone" data-view="listone">
       <div class="panel">
         <div class="listone-toolbar">
-          <label class="field grow">
-            <span>Cerca</span>
-            <input id="list-search" type="search" placeholder="Nome, squadra, specialità…" />
-          </label>
-          <label class="field">
-            <span>Ruolo</span>
-            <select id="list-role">
-              <option value="">Tutti</option>
-              <option value="P">Portieri</option>
-              <option value="D">Difensori</option>
-              <option value="C">Centrocampisti</option>
-              <option value="A">Attaccanti</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Stato</span>
-            <select id="list-availability">
-              <option value="liberi">Liberi</option>
-              <option value="tutti">Tutti</option>
-              <option value="presi">Presi</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Ordina</span>
-            <select id="list-sort">
-              <option value="fvm">FVM ↓</option>
-              <option value="pma">PMA ↓</option>
-              <option value="quotazione">Quotazione ↓</option>
-              <option value="nome">Nome</option>
-            </select>
-          </label>
+          <div class="mantra-filter-bar" id="mantra-filter-bar" hidden>
+            <label class="mantra-search">
+              <span class="mantra-search-ico" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
+              </span>
+              <input id="list-search" type="search" placeholder="CERCA PORTIERE" autocomplete="off" />
+            </label>
+            <div class="mantra-role-pills" id="mantra-role-pills" role="group" aria-label="Filtra per ruolo Mantra"></div>
+          </div>
+
+          <div class="classic-filter-bar" id="classic-filter-bar">
+            <label class="field grow">
+              <span>Cerca</span>
+              <input id="list-search-classic" type="search" placeholder="Nome, squadra, specialità…" />
+            </label>
+            <label class="field">
+              <span>Ruolo</span>
+              <select id="list-role">
+                <option value="">Tutti</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="listone-toolbar-side">
+            <label class="field">
+              <span>Stato</span>
+              <select id="list-availability">
+                <option value="liberi">Liberi</option>
+                <option value="tutti">Tutti</option>
+                <option value="presi">Presi</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Ordina</span>
+              <select id="list-sort">
+                <option value="fvm">FVM ↓</option>
+                <option value="pma">PMA ↓</option>
+                <option value="quotazione">Quotazione ↓</option>
+                <option value="nome">Nome</option>
+              </select>
+            </label>
+          </div>
         </div>
         <div class="listone-meta">
           <span id="list-count">0 giocatori</span>
@@ -117,6 +140,24 @@
         <article class="panel guide-detail" id="guide-detail">
           <p class="empty-state">Seleziona una squadra di Serie A</p>
         </article>
+      </div>
+    </section>
+
+    <!-- MODULI MANTRA -->
+    <section class="view" id="view-moduli" data-view="moduli">
+      <div class="panel moduli-panel">
+        <header class="moduli-head">
+          <div>
+            <p class="moduli-kicker">Sistema Mantra · Fantacalcio.it</p>
+            <h2>Moduli consentiti</h2>
+            <p class="moduli-lead">
+              11 schemi ufficiali. Dove vedi due ruoli (es. <strong>M/C</strong>) sono alternativi sulla stessa posizione.
+              Ogni modulo usa 5 giocatori difensivi e 5 offensivi + Portiere.
+            </p>
+          </div>
+          <div class="moduli-legend" id="moduli-legend"></div>
+        </header>
+        <div class="moduli-grid" id="moduli-grid"></div>
       </div>
     </section>
 
@@ -171,6 +212,10 @@
         <div id="selected-player" class="selected-player is-empty">
           <p>Seleziona un giocatore</p>
         </div>
+        <label class="field" id="slot-role-field" hidden>
+          <span>Slot ruolo</span>
+          <select id="buy-slot-role"></select>
+        </label>
         <label class="field">
           <span>Prezzo</span>
           <input id="buy-price" type="number" min="1" step="1" placeholder="1" />

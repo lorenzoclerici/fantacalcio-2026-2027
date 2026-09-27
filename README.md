@@ -22,7 +22,11 @@ Poi apri [http://localhost:8765](http://localhost:8765).
 - **Riepilogo**: confronto budget di tutte le squadre
 - **Persistenza**: salvataggio in `localStorage` + Esporta/Importa JSON
 
-## Aggiornare il listone
+## Classic / Mantra
+
+In alto a sinistra puoi switchare tra **Classic** (slot P/D/C/A) e **Mantra** (30 caselle libere, senza suddivisione ruoli).
+Le due modalità hanno aste e rose separate (salvataggio indipendente in `localStorage`).
+
 
 ```bash
 python3 scripts/refresh_listone.py

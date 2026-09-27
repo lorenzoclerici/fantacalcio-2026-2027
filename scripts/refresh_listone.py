@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh listone from Fantacalcio.it quotazioni page (teams, QA, FVM)."""
+"""Refresh listone from Fantacalcio.it quotazioni page (teams, QA, FVM Classic+Mantra)."""
 from __future__ import annotations
 
 import html as htmlmod
@@ -7,6 +7,7 @@ import json
 import re
 import unicodedata
 import urllib.request
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +78,7 @@ ROLE_FULL = {
     "C": "Centrocampista",
     "A": "Attaccante",
 }
+FALLBACK_MANTRA = {"P": ["Por"], "D": ["Dc"], "C": ["C"], "A": ["Pc"]}
 OVERRIDES = {
     "kean": {
         "status": "Titolare",
@@ -100,9 +102,20 @@ def norm(s: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s]", " ", s.lower())).strip()
 
 
-def parse_posizione(mantra: str) -> str:
+def parse_mantra_roles(mantra: str) -> list[str]:
     parts = [p for p in re.split(r"[|;,]+", mantra or "") if p]
-    return ";".join(POS_MAP.get(p.lower(), p.capitalize()) for p in parts)
+    roles = [POS_MAP.get(p.lower(), p.capitalize()) for p in parts]
+    return roles or []
+
+
+def parse_posizione(mantra: str) -> str:
+    return ";".join(parse_mantra_roles(mantra))
+
+
+def scale_fvm(fvm1000: int | None, budget: int) -> int | None:
+    if fvm1000 is None:
+        return None
+    return int(round(fvm1000 * budget / 1000))
 
 
 def fetch_html() -> str:
@@ -113,7 +126,7 @@ def fetch_html() -> str:
     return html
 
 
-def parse_players(html: str):
+def parse_players(html: str, budget: int):
     chunks = re.split(r'<tr class="player-row"', html)[1:]
     out = []
     for ch in chunks:
@@ -122,8 +135,12 @@ def parse_players(html: str):
         mmantra = re.search(r'data-filter-role-mantra="([^"]*)"', ch)
         mlink = re.search(r"/serie-a/squadre/([a-z0-9-]+)/", ch)
         mteam = re.search(r'class="player-team"[^>]*>\s*([A-Za-z]{3})\s*<', ch)
-        nums = re.findall(
+        classic = re.findall(
             r'class="player-classic-(?:initial-price|current-price|fvm)"[^>]*>\s*([0-9]+)',
+            ch,
+        )
+        mantra_nums = re.findall(
+            r'class="player-mantra-(?:initial-price|current-price|fvm)"[^>]*>\s*([0-9]+)',
             ch,
         )
         nome = htmlmod.unescape(mkw.group(1)).strip() if mkw else ""
@@ -133,19 +150,26 @@ def parse_players(html: str):
         squadra = SLUG.get(mlink.group(1) if mlink else "", "")
         if not squadra and mteam:
             squadra = SLUG.get(mteam.group(1).lower(), "")
-        qa = to_int(nums[1]) if len(nums) > 1 else to_int(nums[0]) if nums else None
-        fvm1000 = to_int(nums[2]) if len(nums) > 2 else None
-        fvm504 = int(round(fvm1000 * 504 / 1000)) if fvm1000 is not None else None
+        qa = to_int(classic[1]) if len(classic) > 1 else to_int(classic[0]) if classic else None
+        fvm1000 = to_int(classic[2]) if len(classic) > 2 else None
+        qa_m = to_int(mantra_nums[1]) if len(mantra_nums) > 1 else qa
+        fvm_m1000 = to_int(mantra_nums[2]) if len(mantra_nums) > 2 else fvm1000
+        mantra_raw = mmantra.group(1) if mmantra else ""
+        mantra_roles = parse_mantra_roles(mantra_raw) or FALLBACK_MANTRA.get(role, ["C"])
         out.append(
             {
                 "id": f"{nome}|{squadra}",
                 "ruolo": role,
                 "nome": nome,
                 "squadra": squadra,
-                "posizione": parse_posizione(mmantra.group(1) if mmantra else ""),
+                "posizione": parse_posizione(mantra_raw) or ";".join(mantra_roles),
+                "mantraRoles": mantra_roles,
                 "quotazione": qa,
                 "fvm1000": fvm1000,
-                "fvm504": fvm504,
+                "fvm504": scale_fvm(fvm1000, budget),
+                "quotazioneMantra": qa_m,
+                "fvmMantra1000": fvm_m1000,
+                "fvmMantra504": scale_fvm(fvm_m1000, budget),
             }
         )
     return out
@@ -153,24 +177,39 @@ def parse_players(html: str):
 
 def main():
     html = fetch_html()
-    fresh = parse_players(html)
     payload = json.loads(DATA_JS.read_text(encoding="utf-8")[len("window.ASTA_DATA = ") :].rstrip().rstrip(";"))
+    budget = int(payload.get("meta", {}).get("creditiIniziali") or 500)
+    fresh = parse_players(html, budget)
+
     prev_by = {}
     for p in payload["players"]:
         prev_by.setdefault(norm(p["nome"]), []).append(p)
 
     players = []
     transfers = []
+    qa_changes = 0
+    fvm_changes = 0
     for p in fresh:
         cands = prev_by.get(norm(p["nome"]), [])
         prev = next((c for c in cands if c.get("squadra") == p["squadra"]), cands[0] if cands else None)
         if prev and prev.get("squadra") and prev["squadra"] != p["squadra"]:
             transfers.append((p["nome"], prev["squadra"], p["squadra"]))
-        p["status"] = (prev or {}).get("status", "")
-        p["specialita"] = (prev or {}).get("specialita", "")
-        p["consiglio"] = (prev or {}).get("consiglio", "")
-        p["fascia"] = (prev or {}).get("fascia", "")
-        p["pma"] = (prev or {}).get("pma")
+        if prev:
+            if prev.get("quotazione") != p.get("quotazione"):
+                qa_changes += 1
+            if prev.get("fvm1000") != p.get("fvm1000"):
+                fvm_changes += 1
+            for key in ("status", "specialita", "consiglio", "fascia", "pma"):
+                if prev.get(key) not in (None, ""):
+                    p[key] = prev[key]
+            if not p.get("mantraRoles") and prev.get("mantraRoles"):
+                p["mantraRoles"] = prev["mantraRoles"]
+        else:
+            p.setdefault("status", "")
+            p.setdefault("specialita", "")
+            p.setdefault("consiglio", "")
+            p.setdefault("fascia", "")
+            p.setdefault("pma", None)
         ov = OVERRIDES.get(norm(p["nome"]))
         if ov:
             p.update(ov)
@@ -208,8 +247,6 @@ def main():
         parts = [p.strip() for p in como["formazione"].split(";")]
         if parts:
             atts = [n.strip() for n in parts[-1].split(",") if n.strip() and norm(n) != "kean"]
-            parts[-1] = ", ".join(["Kean"] + atts) if False else "Kean"
-            # for 4-2-3-1 last line is single ST
             if len(parts) >= 5:
                 parts[-1] = "Kean"
             else:
@@ -225,20 +262,24 @@ def main():
         fio["formazione"] = "; ".join(rebuilt)
 
     payload["players"] = players
-    payload["meta"]["fonte"] = "Listone Fantacalcio.it 2026/27 aggiornato (squadre, QA, FVM)"
-    from datetime import date
-
+    payload["meta"]["fonte"] = "Listone Fantacalcio.it 2026/27 aggiornato (squadre, QA, FVM Classic+Mantra)"
     payload["meta"]["listoneAggiornato"] = date.today().isoformat()
     DATA_JS.write_text(
         "window.ASTA_DATA = " + json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + ";\n",
         encoding="utf-8",
     )
-    print(f"Players: {len(players)}")
+    print(f"Players: {len(players)} (budget scale {budget})")
+    print(f"QA changed: {qa_changes} · FVM changed: {fvm_changes}")
     print(f"Transfers detected: {len(transfers)}")
     for t in transfers[:20]:
         print(" -", t[0], ":", t[1], "->", t[2])
-    kean = next(p for p in players if p["nome"] == "Kean")
-    print("Kean:", kean["squadra"], "QA", kean["quotazione"], "FVM", kean["fvm504"])
+    for name in ("Kean", "Thuram", "Malen", "Martinez L."):
+        hits = [p for p in players if p["nome"] == name]
+        for p in hits:
+            print(
+                f"{p['nome']}|{p['squadra']} QA {p['quotazione']} FVM {p['fvm504']} "
+                f"Mantra QA {p['quotazioneMantra']} FVM {p['fvmMantra504']} roles {p['mantraRoles']}"
+            )
 
 
 if __name__ == "__main__":

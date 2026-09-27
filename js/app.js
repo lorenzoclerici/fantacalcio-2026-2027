@@ -6,20 +6,141 @@
     return;
   }
 
-  const STORAGE_KEY = "campo-asta-2026-state-v1";
-  const ROLE_ORDER = ["P", "D", "C", "A"];
-  const ROLE_LABEL = {
-    P: "Portieri",
-    D: "Difensori",
-    C: "Centrocampisti",
-    A: "Attaccanti",
-  };
-  const SLOT_COUNTS = { ...DATA.meta.rosa };
+  const MODE_KEY = "campo-asta-2026-mode";
+  const LEGACY_STORAGE_KEY = "campo-asta-2026-state-v1";
   const BUDGET = DATA.meta.creditiIniziali;
-  const TOTAL_SLOTS = Object.values(SLOT_COUNTS).reduce((a, b) => a + b, 0);
+
+  const MODES = {
+    classic: {
+      id: "classic",
+      label: "Classic",
+      roleOrder: ["P", "D", "C", "A"],
+      roleLabel: {
+        P: "Portieri",
+        D: "Difensori",
+        C: "Centrocampisti",
+        A: "Attaccanti",
+      },
+      slotCounts: { ...(DATA.meta.rosaClassic || DATA.meta.rosa) },
+      ownerCount: 10,
+      storageKey: "campo-asta-2026-state-classic-v2",
+    },
+    mantra: {
+      id: "mantra",
+      label: "Mantra",
+      roleOrder: ["Rosa"],
+      roleLabel: { Rosa: "Rosa" },
+      slotCounts: { Rosa: 30 },
+      ownerCount: 8,
+      listRoles: ["Por", "Ds", "Dc", "B", "Dd", "E", "M", "C", "W", "T", "A", "Pc"],
+      listRoleLabel: {
+        Por: "Portiere",
+        Ds: "Dif. sinistro",
+        Dc: "Dif. centrale",
+        B: "Braccetto",
+        Dd: "Dif. destro",
+        E: "Esterno",
+        M: "Mediano",
+        C: "Centrocampista",
+        W: "Centrocampista off.",
+        T: "Trequartista",
+        A: "Attaccante",
+        Pc: "Punta centrale",
+      },
+      flat: true,
+      storageKey: "campo-asta-2026-state-mantra-v3",
+    },
+  };
+
+  const MANTRA_SEARCH_PLACEHOLDER = {
+    "": "CERCA GIOCATORE",
+    Por: "CERCA PORTIERE",
+    Ds: "CERCA DIF. SINISTRO",
+    Dc: "CERCA DIF. CENTRALE",
+    B: "CERCA BRACCETTO",
+    Dd: "CERCA DIF. DESTRO",
+    E: "CERCA ESTERNO",
+    M: "CERCA MEDIANO",
+    C: "CERCA CENTROCAMPISTA",
+    W: "CERCA CENTROCAMPISTA",
+    T: "CERCA TREQUARTISTA",
+    A: "CERCA ATTACCANTE",
+    Pc: "CERCA PUNTA CENTRALE",
+  };
+
+  // Schemi ufficiali Mantra (Fantacalcio.it) — ruoli alternativi separati da /
+  const MANTRA_MODULES = [
+    {
+      id: "3-4-3",
+      lines: [["Dc", "Dc", "Dc/B"], ["E", "M/C", "C", "E"], ["W/A", "A/Pc", "W/A"]],
+    },
+    {
+      id: "3-4-1-2",
+      lines: [["Dc", "Dc", "Dc/B"], ["E", "M/C", "C", "E"], ["T"], ["A/Pc", "A/Pc"]],
+    },
+    {
+      id: "3-4-2-1",
+      lines: [["Dc", "Dc", "Dc/B"], ["E", "M/C", "C", "E"], ["T", "T/A"], ["A/Pc"]],
+    },
+    {
+      id: "3-5-2",
+      lines: [["Dc", "Dc", "Dc/B"], ["E/W", "M/C", "M", "C", "E"], ["A/Pc", "A/Pc"]],
+    },
+    {
+      id: "3-5-1-1",
+      lines: [["Dc", "Dc", "Dc/B"], ["E/W", "M", "C", "M", "E/W"], ["T/A"], ["A/Pc"]],
+    },
+    {
+      id: "4-3-3",
+      lines: [["Dd", "Dc", "Dc", "Ds"], ["M/C", "M", "C"], ["W/A", "A/Pc", "W/A"]],
+    },
+    {
+      id: "4-3-1-2",
+      lines: [["Dd", "Dc", "Dc", "Ds"], ["M/C", "M", "C"], ["T"], ["T/A/Pc", "A/Pc"]],
+    },
+    {
+      id: "4-4-2",
+      lines: [["Dd", "Dc", "Dc", "Ds"], ["E/W", "M/C", "C", "E"], ["A/Pc", "A/Pc"]],
+    },
+    {
+      id: "4-1-4-1",
+      lines: [["Dd", "Dc", "Dc", "Ds"], ["M"], ["E/W", "C/T", "T", "W"], ["A/Pc"]],
+    },
+    {
+      id: "4-4-1-1",
+      lines: [["Dd", "Dc", "Dc", "Ds"], ["E/W", "M", "C", "E/W"], ["T/A"], ["A/Pc"]],
+    },
+    {
+      id: "4-2-3-1",
+      lines: [["Dd", "Dc", "Dc", "Ds"], ["M", "M/C"], ["W/T", "T", "W/A"], ["A/Pc"]],
+    },
+  ];
+
+  const MANTRA_ROLE_TONE = {
+    Por: "por",
+    Dd: "def",
+    Ds: "def",
+    Dc: "def",
+    B: "def",
+    E: "def",
+    M: "mid",
+    C: "mid",
+    W: "att",
+    T: "att",
+    A: "fwd",
+    Pc: "fwd",
+  };
+
+  let mode = loadMode();
+  let cfg = MODES[mode];
 
   const playerById = new Map(DATA.players.map((p) => [p.id, p]));
-  const players = DATA.players.slice();
+  const players = DATA.players.slice().map((p) => ({
+    ...p,
+    mantraRoles: p.mantraRoles?.length
+      ? p.mantraRoles
+      : fallbackMantraRoles(p),
+  }));
 
   let state = loadState();
   let selectedPlayerId = null;
@@ -27,25 +148,153 @@
   let activeGuideTeam = Object.keys(DATA.teams)[0] || null;
   let suggestionIndex = -1;
   let assignRoleFilter = null;
+  let mantraRoleFilter = "Por";
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+  function fallbackMantraRoles(p) {
+    return { P: ["Por"], D: ["Dc"], C: ["C"], A: ["Pc"] }[p.ruolo] || ["C"];
+  }
+
+  function loadMode() {
+    const raw = localStorage.getItem(MODE_KEY);
+    return raw === "mantra" ? "mantra" : "classic";
+  }
+
+  function saveMode() {
+    localStorage.setItem(MODE_KEY, mode);
+  }
+
+  function totalSlots() {
+    return Object.values(cfg.slotCounts).reduce((a, b) => a + b, 0);
+  }
+
+  function playerFvm(p) {
+    if (mode === "mantra") return p.fvmMantra504 ?? p.fvm504;
+    return p.fvm504;
+  }
+
+  function playerQt(p) {
+    if (mode === "mantra") return p.quotazioneMantra ?? p.quotazione;
+    return p.quotazione;
+  }
+
+  function playerRoles(p) {
+    if (mode === "mantra") return p.mantraRoles?.length ? p.mantraRoles : fallbackMantraRoles(p);
+    return [p.ruolo];
+  }
+
+  function primaryRole(p) {
+    if (cfg.flat) return playerRoles(p)[0] || "Rosa";
+    return playerRoles(p)[0];
+  }
+
+  function playerFitsRole(p, role) {
+    if (!role || role === "Rosa") return true;
+    if (mode === "mantra") return playerRoles(p).includes(role);
+    return p.ruolo === role;
+  }
+
+  function displayRole(p) {
+    if (mode === "mantra") return (p.mantraRoles || []).join("/") || p.ruolo;
+    return p.ruolo;
+  }
+
+  function blankState() {
+    const count = cfg.ownerCount || (Array.isArray(DATA.fantallenatori) ? DATA.fantallenatori.length : 10);
+    const owners = Array.from({ length: count }, (_, i) => `owner-${i + 1}`);
+    return {
+      owners,
+      ownerNames: Object.fromEntries(owners.map((o) => [o, ""])),
+      purchases: [],
+      budgets: Object.fromEntries(owners.map((o) => [o, BUDGET])),
+    };
+  }
+
+  function ensureBudgets(st) {
+    if (!st.budgets || typeof st.budgets !== "object") st.budgets = {};
+    for (const o of st.owners) {
+      const n = Number(st.budgets[o]);
+      st.budgets[o] = Number.isFinite(n) && n >= 1 ? Math.round(n) : BUDGET;
+    }
+    return st;
+  }
+
+  function ensureOwnerMeta(st) {
+    if (!st.ownerNames || typeof st.ownerNames !== "object") {
+      st.ownerNames = {};
+      for (const o of st.owners) {
+        st.ownerNames[o] = String(o).startsWith("owner-") ? "" : o;
+      }
+    }
+    for (const o of st.owners) {
+      if (st.ownerNames[o] == null) st.ownerNames[o] = "";
+    }
+    return ensureBudgets(st);
+  }
+
+  function ownerBudget(owner) {
+    return state.budgets?.[owner] ?? BUDGET;
+  }
+
+  function ownerLabel(owner) {
+    const name = String(state.ownerNames?.[owner] ?? "").trim();
+    if (name) return name;
+    const idx = state.owners.indexOf(owner);
+    return `Squadra ${idx >= 0 ? idx + 1 : "?"}`;
+  }
+
   function loadState() {
-    const blank = () => ({ owners: [...DATA.fantallenatori], purchases: [] });
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return blank();
+      const raw = localStorage.getItem(cfg.storageKey);
+      if (!raw) return blankState();
       const parsed = JSON.parse(raw);
-      if (!parsed?.purchases || !parsed?.owners) return blank();
-      return parsed;
+      if (!parsed?.purchases || !parsed?.owners) return blankState();
+      parsed.purchases = parsed.purchases.map((buy) => {
+        if (cfg.flat) return { ...buy, slotRole: "Rosa" };
+        if (buy.slotRole) return buy;
+        const pl = playerById.get(buy.playerId);
+        return {
+          ...buy,
+          slotRole: pl ? pl.ruolo : buy.slotRole,
+        };
+      });
+      return ensureOwnerMeta(parsed);
     } catch {
-      return blank();
+      return blankState();
     }
   }
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(cfg.storageKey, JSON.stringify(state));
+  }
+
+  function switchMode(next) {
+    if (!MODES[next] || next === mode) return;
+    saveState();
+    mode = next;
+    cfg = MODES[mode];
+    saveMode();
+    document.body.dataset.mode = mode;
+    $$(".mode-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mode === mode));
+    state = loadState();
+    selectedPlayerId = null;
+    assignRoleFilter = null;
+    fillRoleFilter();
+    updateMantraNav();
+    if (mode !== "mantra") {
+      const active = document.querySelector(".nav-item.is-active");
+      if (active?.dataset.view === "moduli") switchView("rose");
+    }
+    const banner = $("#mode-banner");
+    if (banner) {
+      banner.textContent =
+        mode === "mantra"
+          ? "Modalità Mantra · 8 squadre · 30 slot liberi (senza suddivisione ruoli)"
+          : "Modalità Classic · 10 squadre · slot P · D · C · A";
+    }
+    renderAll();
   }
 
   function purchaseMap() {
@@ -55,14 +304,16 @@
   }
 
   function ownerRoster(owner) {
-    const byRole = { P: [], D: [], C: [], A: [] };
+    const byRole = Object.fromEntries(cfg.roleOrder.map((r) => [r, []]));
     for (const buy of state.purchases) {
       if (buy.owner !== owner) continue;
       const player = playerById.get(buy.playerId);
       if (!player) continue;
-      byRole[player.ruolo].push({ ...buy, player });
+      const slot = cfg.flat ? "Rosa" : buy.slotRole || primaryRole(player);
+      if (!byRole[slot]) byRole[slot] = [];
+      byRole[slot].push({ ...buy, player, slotRole: slot });
     }
-    for (const r of ROLE_ORDER) byRole[r].sort((a, b) => b.price - a.price);
+    for (const r of cfg.roleOrder) byRole[r].sort((a, b) => b.price - a.price);
     return byRole;
   }
 
@@ -72,29 +323,59 @@
     const countByRole = {};
     let spent = 0;
     let filled = 0;
-    for (const r of ROLE_ORDER) {
+    for (const r of cfg.roleOrder) {
       const sum = roster[r].reduce((acc, x) => acc + x.price, 0);
       spentByRole[r] = sum;
       countByRole[r] = roster[r].length;
       spent += sum;
       filled += roster[r].length;
     }
-    const freeSlots = TOTAL_SLOTS - filled;
-    const remaining = BUDGET - spent;
+    const freeSlots = totalSlots() - filled;
+    const budget = ownerBudget(owner);
+    const remaining = budget - spent;
     const maxBid = Math.max(0, remaining - Math.max(0, freeSlots - 1));
     const freeByRole = {};
-    for (const r of ROLE_ORDER) freeByRole[r] = SLOT_COUNTS[r] - countByRole[r];
+    for (const r of cfg.roleOrder) freeByRole[r] = cfg.slotCounts[r] - countByRole[r];
     return {
       roster,
       spentByRole,
       countByRole,
       freeByRole,
       spent,
+      budget,
       remaining,
       maxBid,
       freeSlots,
       filled,
     };
+  }
+
+  function setOwnerName(ownerId, newName) {
+    const next = String(newName || "").trim();
+    ensureOwnerMeta(state);
+    const clash = state.owners.some((o) => {
+      if (o === ownerId) return false;
+      const other = String(state.ownerNames[o] || "").trim();
+      return next && other.toLowerCase() === next.toLowerCase();
+    });
+    if (clash) {
+      alert("Esiste già una squadra con questo nome");
+      return false;
+    }
+    if (String(state.ownerNames[ownerId] || "") === next) return false;
+    state.ownerNames[ownerId] = next;
+    saveState();
+    return true;
+  }
+
+  function setOwnerBudget(owner, value) {
+    const n = Math.round(Number(value));
+    if (!Number.isFinite(n) || n < 1) return false;
+    ensureBudgets(state);
+    if (state.budgets[owner] === n) return false;
+    state.budgets[owner] = n;
+    saveState();
+    return true;
   }
 
   function rolePct(spentRole, spentTotal) {
@@ -134,7 +415,7 @@
   function fillOwnerSelect(preferred) {
     const el = $("#buy-owner");
     el.innerHTML = state.owners
-      .map((o) => `<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`)
+      .map((o) => `<option value="${escapeAttr(o)}">${escapeHtml(ownerLabel(o))}</option>`)
       .join("");
     if (preferred && state.owners.includes(preferred)) el.value = preferred;
   }
@@ -144,20 +425,17 @@
     board.innerHTML = state.owners
       .map((owner) => {
         const s = ownerStats(owner);
-        let cumulativeSpent = 0;
-        const rolesHtml = ROLE_ORDER.map((role) => {
-          const items = s.roster[role];
-          const slots = SLOT_COUNTS[role];
-          const spentRole = s.spentByRole[role];
-          cumulativeSpent += spentRole;
-          const remainingAfterRole = BUDGET - cumulativeSpent;
-          const pct = rolePct(spentRole, s.spent);
+        let bodyHtml = "";
+
+        if (cfg.flat) {
+          const items = s.roster.Rosa || [];
+          const slots = cfg.slotCounts.Rosa || 30;
           const rows = [];
           for (let i = 0; i < slots; i++) {
             const item = items[i];
             if (item) {
               rows.push(`
-                <li class="slot filled" title="${escapeAttr(item.player.squadra)}">
+                <li class="slot filled" title="${escapeAttr(item.player.squadra)} · ${escapeAttr(displayRole(item.player))}">
                   <span class="pname">${escapeHtml(item.player.nome)}</span>
                   <span class="price">${item.price}</span>
                   <button type="button" class="remove" data-remove="${escapeAttr(item.id)}" title="Rimuovi">✕</button>
@@ -165,52 +443,123 @@
               `);
             } else {
               rows.push(`
-                <li class="slot empty" data-add-owner="${escapeAttr(owner)}" data-add-role="${role}">·</li>
+                <li class="slot empty" data-add-owner="${escapeAttr(owner)}">·</li>
               `);
             }
           }
-          return `
-            <div class="role-block">
-              <div class="role-bar ${role}">
-                <span>${role}</span>
-                <span class="pct">${pct}%</span>
-                <button type="button" class="role-add" data-add-owner="${escapeAttr(owner)}" data-add-role="${role}" title="Aggiungi">+</button>
+          bodyHtml = `
+            <div class="role-block flat-rosa">
+              <div class="role-bar Rosa">
+                <span>Rosa</span>
+                <span class="pct">${items.length}/${slots}</span>
+                <button type="button" class="role-add" data-add-owner="${escapeAttr(owner)}" title="Aggiungi">+</button>
               </div>
               <ul class="slot-list">${rows.join("")}</ul>
               <div class="role-totals">
                 <div class="role-total-row">
                   <span>Speso</span>
-                  <strong>${spentRole}</strong>
+                  <strong>${s.spent}</strong>
                 </div>
                 <div class="role-total-row remain">
                   <span>Rimasti</span>
-                  <strong>${remainingAfterRole}</strong>
+                  <strong>${s.remaining}</strong>
                 </div>
               </div>
             </div>
           `;
-        }).join("");
+        } else {
+          let cumulativeSpent = 0;
+          bodyHtml = cfg.roleOrder
+            .map((role) => {
+              const items = s.roster[role];
+              const slots = cfg.slotCounts[role];
+              const spentRole = s.spentByRole[role];
+              cumulativeSpent += spentRole;
+              const remainingAfterRole = s.budget - cumulativeSpent;
+              const pct = rolePct(spentRole, s.spent);
+              const rows = [];
+              for (let i = 0; i < slots; i++) {
+                const item = items[i];
+                if (item) {
+                  rows.push(`
+                    <li class="slot filled" title="${escapeAttr(item.player.squadra)}">
+                      <span class="pname">${escapeHtml(item.player.nome)}</span>
+                      <span class="price">${item.price}</span>
+                      <button type="button" class="remove" data-remove="${escapeAttr(item.id)}" title="Rimuovi">✕</button>
+                    </li>
+                  `);
+                } else {
+                  rows.push(`
+                    <li class="slot empty" data-add-owner="${escapeAttr(owner)}" data-add-role="${role}">·</li>
+                  `);
+                }
+              }
+              return `
+                <div class="role-block">
+                  <div class="role-bar ${role}">
+                    <span>${role}</span>
+                    <span class="pct">${pct}%</span>
+                    <button type="button" class="role-add" data-add-owner="${escapeAttr(owner)}" data-add-role="${role}" title="Aggiungi">+</button>
+                  </div>
+                  <ul class="slot-list">${rows.join("")}</ul>
+                  <div class="role-totals">
+                    <div class="role-total-row">
+                      <span>Speso</span>
+                      <strong>${spentRole}</strong>
+                    </div>
+                    <div class="role-total-row remain">
+                      <span>Rimasti</span>
+                      <strong>${remainingAfterRole}</strong>
+                    </div>
+                  </div>
+                </div>
+              `;
+            })
+            .join("");
+        }
 
         return `
           <article class="team-col" data-owner="${escapeAttr(owner)}">
             <header class="team-head">
-              <p class="team-name" title="${escapeAttr(owner)}">${escapeHtml(owner)}</p>
+              <input
+                class="team-name-input"
+                type="text"
+                value="${escapeAttr(state.ownerNames?.[owner] || "")}"
+                data-owner="${escapeAttr(owner)}"
+                placeholder="Nome squadra"
+                aria-label="Nome squadra"
+                title="Clicca per inserire il nome"
+                maxlength="24"
+              />
               <div class="budget-row">
                 <span class="coin" aria-hidden="true"></span>
-                <span class="budget">${s.remaining}</span>
+                <span class="budget" title="Crediti rimasti">${s.remaining}</span>
               </div>
+              <label class="credits-edit" title="Crediti iniziali">
+                <span>Crediti</span>
+                <input
+                  class="budget-start-input"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="${s.budget}"
+                  data-owner="${escapeAttr(owner)}"
+                  aria-label="Crediti iniziali"
+                />
+              </label>
               <div class="team-meta">
                 <span class="max">$${s.maxBid} MAX</span>
-                <span>${s.filled}/${TOTAL_SLOTS}</span>
+                <span>${s.filled}/${totalSlots()}</span>
               </div>
-              <div class="role-counts">
-                <span class="P">${s.freeByRole.P}</span>
-                <span class="D">${s.freeByRole.D}</span>
-                <span class="C">${s.freeByRole.C}</span>
-                <span class="A">${s.freeByRole.A}</span>
-              </div>
+              ${
+                cfg.flat
+                  ? ""
+                  : `<div class="role-counts">${cfg.roleOrder
+                      .map((r) => `<span class="${r}">${s.freeByRole[r]}</span>`)
+                      .join("")}</div>`
+              }
             </header>
-            ${rolesHtml}
+            ${bodyHtml}
           </article>
         `;
       })
@@ -218,35 +567,86 @@
   }
 
   function getFilteredPlayers() {
-    const q = normalize($("#list-search").value.trim());
-    const role = $("#list-role").value;
+    const searchEl = mode === "mantra" ? $("#list-search") : $("#list-search-classic");
+    const q = normalize((searchEl?.value || "").trim());
+    const role = mode === "mantra" ? mantraRoleFilter : $("#list-role").value;
     const availability = $("#list-availability").value;
     const sort = $("#list-sort").value;
     const taken = purchaseMap();
 
     let list = players.filter((p) => {
-      if (role && p.ruolo !== role) return false;
+      if (role && !playerFitsRole(p, role)) return false;
       const buy = taken.get(p.id);
       if (availability === "liberi" && buy) return false;
       if (availability === "presi" && !buy) return false;
       if (!q) return true;
       const hay = normalize(
-        [p.nome, p.squadra, p.status, p.posizione, p.specialita, p.fascia].join(" ")
+        [p.nome, p.squadra, p.status, p.posizione, p.specialita, p.fascia, displayRole(p)].join(" ")
       );
       return hay.includes(q);
     });
 
     list.sort((a, b) => {
       if (sort === "nome") return a.nome.localeCompare(b.nome, "it");
-      if (sort === "quotazione") return (b.quotazione || 0) - (a.quotazione || 0);
+      if (sort === "quotazione") return (playerQt(b) || 0) - (playerQt(a) || 0);
       if (sort === "pma") return (b.pma || 0) - (a.pma || 0);
-      return (b.fvm504 || 0) - (a.fvm504 || 0);
+      return (playerFvm(b) || 0) - (playerFvm(a) || 0);
     });
     return list;
   }
 
   function suggestedPrice(p) {
-    return p.pma || p.fvm504 || p.quotazione || 1;
+    return p.pma || playerFvm(p) || playerQt(p) || 1;
+  }
+
+  function updateMantraSearchPlaceholder() {
+    const input = $("#list-search");
+    if (!input) return;
+    input.placeholder = MANTRA_SEARCH_PLACEHOLDER[mantraRoleFilter] || MANTRA_SEARCH_PLACEHOLDER[""];
+  }
+
+  function renderMantraRolePills() {
+    const box = $("#mantra-role-pills");
+    if (!box) return;
+    const labels = MODES.mantra.listRoleLabel;
+    box.innerHTML = MODES.mantra.listRoles
+      .map(
+        (r) => `
+        <button
+          type="button"
+          class="mantra-role-pill${mantraRoleFilter === r ? " is-active" : ""}"
+          data-mantra-role="${escapeAttr(r)}"
+          title="${escapeAttr(labels[r] || r)}"
+          aria-pressed="${mantraRoleFilter === r ? "true" : "false"}"
+        >${escapeHtml(r)}</button>`
+      )
+      .join("");
+    updateMantraSearchPlaceholder();
+  }
+
+  function fillRoleFilter() {
+    const isMantra = mode === "mantra";
+    const mantraBar = $("#mantra-filter-bar");
+    const classicBar = $("#classic-filter-bar");
+    if (mantraBar) mantraBar.hidden = !isMantra;
+    if (classicBar) classicBar.hidden = isMantra;
+
+    if (isMantra) {
+      renderMantraRolePills();
+      return;
+    }
+
+    const sel = $("#list-role");
+    if (!sel) return;
+    const current = sel.value;
+    const roles = cfg.roleOrder;
+    const labels = cfg.roleLabel;
+    sel.innerHTML =
+      `<option value="">Tutti</option>` +
+      roles
+        .map((r) => `<option value="${escapeAttr(r)}">${escapeHtml(r)} · ${escapeHtml(labels[r] || r)}</option>`)
+        .join("");
+    if ([...sel.options].some((o) => o.value === current)) sel.value = current;
   }
 
   function renderListone() {
@@ -263,21 +663,28 @@
       .map((p) => {
         const buy = taken.get(p.id);
         const fc = fasciaClass(p.fascia);
+        const fvm = playerFvm(p);
+        const qt = playerQt(p);
+        const badge = mode === "mantra" ? primaryRole(p) : p.ruolo;
         const delta =
-          p.pma != null && p.fvm504 != null ? p.pma - p.fvm504 : null;
+          p.pma != null && fvm != null ? p.pma - fvm : null;
         const deltaCls =
           delta == null ? "" : delta > 5 ? "pma-hot" : delta < -5 ? "pma-cold" : "";
         return `
           <tr class="${buy ? "is-taken" : ""}">
-            <td><span class="role-badge ${p.ruolo}">${p.ruolo}</span></td>
+            <td><span class="role-badge ${badge}" title="${escapeAttr(displayRole(p))}">${escapeHtml(badge)}</span></td>
             <td>
               <strong>${escapeHtml(p.nome)}</strong>
-              ${p.specialita ? `<div class="taken-by">${escapeHtml(p.specialita)}</div>` : ""}
+              <div class="taken-by">${
+                mode === "mantra"
+                  ? escapeHtml(displayRole(p))
+                  : escapeHtml(p.posizione || p.ruolo)
+              }${p.specialita ? " · " + escapeHtml(p.specialita) : ""}</div>
             </td>
             <td>${escapeHtml(p.squadra)}</td>
             <td>${escapeHtml(p.status || "—")}</td>
-            <td>${p.quotazione ?? "—"}</td>
-            <td><strong>${p.fvm504 ?? "—"}</strong></td>
+            <td>${qt ?? "—"}</td>
+            <td><strong>${fvm ?? "—"}</strong></td>
             <td class="pma-cell ${deltaCls}" title="${
               delta == null
                 ? "PMA non disponibile"
@@ -287,7 +694,7 @@
             <td>
               ${
                 buy
-                  ? `<span class="taken-by">${escapeHtml(buy.owner)} · ${buy.price}</span>`
+                  ? `<span class="taken-by">${escapeHtml(ownerLabel(buy.owner))} · ${buy.price}</span>`
                   : `<button class="btn-mini" data-action="assign-from-list" data-id="${escapeAttr(p.id)}">Assegna</button>`
               }
               <button class="btn-mini" data-action="info" data-id="${escapeAttr(p.id)}">Info</button>
@@ -563,7 +970,7 @@
                         id && !buy
                           ? `<button class="btn-mini" data-action="assign-from-list" data-id="${escapeAttr(id)}">Assegna</button>`
                           : buy
-                            ? `<span class="taken-by">${escapeHtml(buy.owner)}</span>`
+                            ? `<span class="taken-by">${escapeHtml(ownerLabel(buy.owner))}</span>`
                             : ""
                       }
                     </td>
@@ -577,21 +984,95 @@
     `;
   }
 
+  function mantraSlotTone(slot) {
+    const primary = String(slot || "").split("/")[0];
+    return MANTRA_ROLE_TONE[primary] || "mid";
+  }
+
+  function renderMantraModulePitch(mod) {
+    const attackFirst = [...mod.lines].reverse();
+    const rows = [
+      ...attackFirst.map(
+        (line) => `
+        <div class="mod-pitch-row">
+          ${line
+            .map(
+              (slot) =>
+                `<span class="mod-slot tone-${mantraSlotTone(slot)}" title="${escapeAttr(slot)}">${escapeHtml(slot)}</span>`
+            )
+            .join("")}
+        </div>`
+      ),
+      `<div class="mod-pitch-row">
+        <span class="mod-slot tone-por" title="Portiere">Por</span>
+      </div>`,
+    ];
+    return `<div class="mod-pitch" aria-hidden="true">${rows.join("")}</div>`;
+  }
+
+  function renderModuli() {
+    const grid = $("#moduli-grid");
+    const legend = $("#moduli-legend");
+    if (!grid) return;
+
+    if (legend) {
+      legend.innerHTML = `
+        <span class="mod-leg"><i class="tone-por"></i> Por</span>
+        <span class="mod-leg"><i class="tone-def"></i> Dif / E / M</span>
+        <span class="mod-leg"><i class="tone-mid"></i> C</span>
+        <span class="mod-leg"><i class="tone-att"></i> W / T</span>
+        <span class="mod-leg"><i class="tone-fwd"></i> A / Pc</span>
+      `;
+    }
+
+    grid.innerHTML = MANTRA_MODULES.map((mod) => {
+      const flat = mod.lines.flat();
+      return `
+        <article class="modulo-card">
+          <header class="modulo-card-head">
+            <h3>${escapeHtml(mod.id)}</h3>
+            <span class="modulo-count">${flat.length + 1} in campo</span>
+          </header>
+          ${renderMantraModulePitch(mod)}
+          <p class="modulo-roles">
+            <span class="role-chip tone-por">Por</span>
+            ${flat
+              .map((s) => `<span class="role-chip tone-${mantraSlotTone(s)}">${escapeHtml(s)}</span>`)
+              .join("")}
+          </p>
+        </article>
+      `;
+    }).join("");
+  }
+
+  function updateMantraNav() {
+    const isMantra = mode === "mantra";
+    $$(".nav-item.mantra-only").forEach((el) => {
+      el.hidden = !isMantra;
+    });
+  }
+
   function renderSummary() {
     $("#summary-tbody").innerHTML = state.owners
       .map((owner) => {
         const s = ownerStats(owner);
+        const byClassic = { P: 0, D: 0, C: 0, A: 0 };
+        for (const buy of state.purchases) {
+          if (buy.owner !== owner) continue;
+          const pl = playerById.get(buy.playerId);
+          if (pl && byClassic[pl.ruolo] != null) byClassic[pl.ruolo] += buy.price;
+        }
         return `
           <tr>
-            <td>${escapeHtml(owner)}</td>
-            <td>${s.spentByRole.P}</td>
-            <td>${s.spentByRole.D}</td>
-            <td>${s.spentByRole.C}</td>
-            <td>${s.spentByRole.A}</td>
+            <td>${escapeHtml(ownerLabel(owner))}</td>
+            <td>${byClassic.P}</td>
+            <td>${byClassic.D}</td>
+            <td>${byClassic.C}</td>
+            <td>${byClassic.A}</td>
             <td><strong>${s.spent}</strong></td>
             <td>${s.remaining}</td>
             <td>${s.maxBid}</td>
-            <td>${s.filled}/${TOTAL_SLOTS}</td>
+            <td>${s.filled}/${totalSlots()}</td>
           </tr>
         `;
       })
@@ -607,8 +1088,10 @@
     renderListone();
     renderGuideNav();
     renderGuide();
+    renderModuli();
     renderSummary();
     updateUndo();
+    updateMantraNav();
   }
 
   function renderSelected() {
@@ -618,6 +1101,7 @@
       box.className = "selected-player is-empty";
       box.innerHTML = "<p>Seleziona un giocatore</p>";
       btn.disabled = true;
+      updateSlotRoleField(null);
       updateAssignHint();
       return;
     }
@@ -626,20 +1110,57 @@
     box.className = "selected-player";
     box.innerHTML = `
       <h3>${escapeHtml(p.nome)}</h3>
-      <div style="color:var(--muted);font-size:.85rem">${escapeHtml(p.squadra)} · ${escapeHtml(ROLE_LABEL[p.ruolo])} · ${escapeHtml(p.posizione || "—")}</div>
+      <div style="color:var(--muted);font-size:.85rem">${escapeHtml(p.squadra)} · ${escapeHtml(displayRole(p))} · ${escapeHtml(p.posizione || "—")}</div>
       <div class="tags">
-        <span class="tag">Qt ${p.quotazione ?? "—"}</span>
-        <span class="tag">FVM ${p.fvm504 ?? "—"}</span>
+        <span class="tag">Qt ${playerQt(p) ?? "—"}</span>
+        <span class="tag">FVM ${playerFvm(p) ?? "—"}</span>
         <span class="tag">PMA ${p.pma ?? "—"}</span>
         ${p.fascia ? `<span class="tag">${escapeHtml(p.fascia)}</span>` : ""}
-        ${buy ? `<span class="tag">Già di ${escapeHtml(buy.owner)}</span>` : ""}
+        ${buy ? `<span class="tag">Già di ${escapeHtml(ownerLabel(buy.owner))}</span>` : ""}
       </div>
     `;
     btn.disabled = Boolean(buy);
     if (!buy && !$("#buy-price").value) {
       $("#buy-price").value = suggestedPrice(p);
     }
+    updateSlotRoleField(p);
     updateAssignHint();
+  }
+
+  function updateSlotRoleField(player) {
+    const field = $("#slot-role-field");
+    const sel = $("#buy-slot-role");
+    if (!field || !sel) return;
+    // Mantra flat: no role slot picker
+    if (!player || mode !== "mantra" || cfg.flat) {
+      field.hidden = true;
+      sel.innerHTML = "";
+      return;
+    }
+    let roles = playerRoles(player);
+    if (assignRoleFilter) {
+      roles = roles.filter((r) => r === assignRoleFilter);
+      if (!roles.length) roles = [assignRoleFilter];
+    }
+    roles = roles.filter((r) => cfg.slotCounts[r]);
+    if (!roles.length) roles = [primaryRole(player)];
+    field.hidden = false;
+    const prev = sel.value;
+    sel.innerHTML = roles
+      .map((r) => `<option value="${escapeAttr(r)}">${escapeHtml(r)} · ${escapeHtml(cfg.roleLabel[r] || r)}</option>`)
+      .join("");
+    if (assignRoleFilter && roles.includes(assignRoleFilter)) sel.value = assignRoleFilter;
+    else if (roles.includes(prev)) sel.value = prev;
+  }
+
+  function getSelectedSlotRole(player) {
+    if (cfg.flat) return "Rosa";
+    if (mode === "mantra") {
+      const fromSelect = $("#buy-slot-role")?.value;
+      if (fromSelect) return fromSelect;
+    }
+    if (assignRoleFilter) return assignRoleFilter;
+    return primaryRole(player);
   }
 
   function updateAssignHint() {
@@ -649,16 +1170,18 @@
       return;
     }
     const s = ownerStats(owner);
-    $("#assign-hint").textContent = `${owner}: ${s.remaining} crediti · max bid $${s.maxBid} · ${s.filled}/${TOTAL_SLOTS} slot`;
+    $("#assign-hint").textContent = `${ownerLabel(owner)}: ${s.remaining} crediti · max bid $${s.maxBid} · ${s.filled}/${totalSlots()} slot · ${cfg.label}`;
   }
 
   function openAssign({ owner = null, role = null, playerId = null } = {}) {
-    assignRoleFilter = role;
+    assignRoleFilter = cfg.flat ? null : role;
     selectedPlayerId = playerId;
     fillOwnerSelect(owner || state.owners[0]);
-    $("#assign-kicker").textContent = role
-      ? `Reparto ${ROLE_LABEL[role] || role}`
-      : "Nuovo acquisto";
+    $("#assign-kicker").textContent = cfg.flat
+      ? `Nuovo acquisto · Mantra (30 slot)`
+      : role
+        ? `Reparto ${cfg.roleLabel[role] || role}`
+        : `Nuovo acquisto · ${cfg.label}`;
     $("#assign-title").textContent = owner ? `Assegna a ${owner}` : "Assegna calciatore";
     $("#buy-search").value = playerId ? playerById.get(playerId)?.nome || "" : "";
     $("#buy-price").value = "";
@@ -686,13 +1209,23 @@
     if (purchaseMap().has(playerId)) return "Giocatore già acquistato";
     if (!owner) return "Scegli un fantallenatore";
     if (!Number.isFinite(price) || price < 1) return "Prezzo non valido";
-    if (assignRoleFilter && player.ruolo !== assignRoleFilter) {
-      return `Questo slot è per ${ROLE_LABEL[assignRoleFilter]}`;
-    }
+    const slotRole = getSelectedSlotRole(player);
     const stats = ownerStats(owner);
-    if (stats.roster[player.ruolo].length >= SLOT_COUNTS[player.ruolo]) {
-      return `Reparto ${ROLE_LABEL[player.ruolo]} pieno`;
+
+    if (cfg.flat) {
+      if (stats.filled >= totalSlots()) return "Rosa piena (30/30)";
+    } else {
+      if (assignRoleFilter && !playerFitsRole(player, assignRoleFilter)) {
+        return `Questo slot è per ${cfg.roleLabel[assignRoleFilter] || assignRoleFilter} (giocatore: ${displayRole(player)})`;
+      }
+      if (!cfg.slotCounts[slotRole]) {
+        return `Ruolo ${slotRole} non disponibile in ${cfg.label}`;
+      }
+      if ((stats.roster[slotRole] || []).length >= cfg.slotCounts[slotRole]) {
+        return `Reparto ${cfg.roleLabel[slotRole] || slotRole} pieno`;
+      }
     }
+
     if (price > stats.remaining) return "Budget insufficiente";
     if (price > stats.maxBid) {
       return `Max bid attuale: ${stats.maxBid} (serve 1 credito per ogni slot libero rimanente)`;
@@ -709,11 +1242,14 @@
       alert(err);
       return;
     }
+    const player = playerById.get(playerId);
+    const slotRole = getSelectedSlotRole(player);
     state.purchases.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       playerId,
       owner,
       price,
+      slotRole,
       at: Date.now(),
     });
     saveState();
@@ -744,20 +1280,22 @@
     $("#modal-title").textContent = p.nome;
     $("#modal-body").innerHTML = `
       <p><strong>Squadra:</strong> ${escapeHtml(p.squadra)}</p>
-      <p><strong>Ruolo:</strong> ${escapeHtml(ROLE_LABEL[p.ruolo])} (${escapeHtml(p.posizione || "—")})</p>
+      <p><strong>Ruolo Classic:</strong> ${escapeHtml(p.ruolo)} · <strong>Mantra:</strong> ${escapeHtml((p.mantraRoles || []).join("/") || "—")}</p>
+      <p><strong>Posizione:</strong> ${escapeHtml(p.posizione || "—")}</p>
       <p><strong>Status:</strong> ${escapeHtml(p.status || "—")}</p>
-      <p><strong>Quotazione:</strong> ${p.quotazione ?? "—"} · <strong>FVM 504:</strong> ${p.fvm504 ?? "—"} · <strong>PMA:</strong> ${p.pma ?? "—"}</p>
+      <p><strong>Quotazione:</strong> ${playerQt(p) ?? "—"} · <strong>FVM 504:</strong> ${playerFvm(p) ?? "—"} · <strong>PMA:</strong> ${p.pma ?? "—"}</p>
       <p class="empty-state" style="margin:0 0 .65rem;font-size:.8rem">PMA = prezzo medio asta Classic ~10 (fonte Fantacalcio-Online), scalato su 504 crediti.</p>
       <p><strong>Fascia:</strong> ${escapeHtml(p.fascia || "—")}</p>
       <p><strong>Specialità:</strong> ${escapeHtml(p.specialita || "—")}</p>
       <p><strong>Consiglio:</strong> ${escapeHtml(p.consiglio || "—")}</p>
-      ${buy ? `<p><strong>Preso da:</strong> ${escapeHtml(buy.owner)} a ${buy.price}</p>` : ""}
+      ${buy ? `<p><strong>Preso da:</strong> ${escapeHtml(ownerLabel(buy.owner))} a ${buy.price}</p>` : ""}
     `;
     $("#modal-assign").disabled = Boolean(buy);
     $("#player-modal").showModal();
   }
 
   function switchView(name) {
+    if (name === "moduli" && mode !== "mantra") name = "rose";
     $$(".nav-item").forEach((t) => t.classList.toggle("is-active", t.dataset.view === name));
     $$(".view").forEach((v) => v.classList.toggle("is-active", v.dataset.view === name));
   }
@@ -769,10 +1307,10 @@
     return players
       .filter((p) => {
         if (taken.has(p.id)) return false;
-        if (assignRoleFilter && p.ruolo !== assignRoleFilter) return false;
+        if (assignRoleFilter && !playerFitsRole(p, assignRoleFilter)) return false;
         return normalize(p.nome).includes(q) || normalize(p.squadra).includes(q);
       })
-      .sort((a, b) => (b.fvm504 || 0) - (a.fvm504 || 0))
+      .sort((a, b) => (playerFvm(b) || 0) - (playerFvm(a) || 0))
       .slice(0, 10);
   }
 
@@ -791,7 +1329,7 @@
         <li>
           <button type="button" data-id="${escapeAttr(p.id)}" class="${i === suggestionIndex ? "is-active" : ""}">
             <span>${escapeHtml(p.nome)}</span>
-            <span class="meta">${escapeHtml(p.squadra)} · ${p.ruolo} · FVM ${p.fvm504 ?? "—"} · PMA ${p.pma ?? "—"}</span>
+            <span class="meta">${escapeHtml(p.squadra)} · ${escapeHtml(displayRole(p))} · FVM ${playerFvm(p) ?? "—"} · PMA ${p.pma ?? "—"}</span>
           </button>
         </li>`
       )
@@ -813,7 +1351,7 @@
       try {
         const parsed = JSON.parse(reader.result);
         if (!parsed.purchases || !parsed.owners) throw new Error("Formato non valido");
-        state = parsed;
+        state = ensureOwnerMeta(parsed);
         saveState();
         renderAll();
         alert("Stato importato");
@@ -830,6 +1368,7 @@
   });
 
   $("#roster-board").addEventListener("click", (e) => {
+    if (e.target.closest(".team-name-input, .budget-start-input, .credits-edit")) return;
     const removeBtn = e.target.closest("[data-remove]");
     if (removeBtn) {
       if (confirm("Rimuovere questo giocatore dalla rosa?")) {
@@ -843,6 +1382,34 @@
         owner: addBtn.dataset.addOwner,
         role: addBtn.dataset.addRole || null,
       });
+    }
+  });
+
+  $("#roster-board").addEventListener("focusin", (e) => {
+    const input = e.target.closest(".team-name-input, .budget-start-input");
+    if (input) input.select();
+  });
+
+  $("#roster-board").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    if (!e.target.closest(".team-name-input, .budget-start-input")) return;
+    e.preventDefault();
+    e.target.blur();
+  });
+
+  $("#roster-board").addEventListener("change", (e) => {
+    const nameInput = e.target.closest(".team-name-input");
+    if (nameInput) {
+      const ownerId = nameInput.dataset.owner;
+      if (setOwnerName(ownerId, nameInput.value)) renderAll();
+      else nameInput.value = state.ownerNames?.[ownerId] || "";
+      return;
+    }
+    const budgetInput = e.target.closest(".budget-start-input");
+    if (budgetInput) {
+      const owner = budgetInput.dataset.owner;
+      if (setOwnerBudget(owner, budgetInput.value)) renderAll();
+      else budgetInput.value = String(ownerBudget(owner));
     }
   });
 
@@ -865,9 +1432,20 @@
     }
   });
 
-  ["list-search", "list-role", "list-availability", "list-sort"].forEach((id) => {
-    $(`#${id}`).addEventListener("input", renderListone);
-    $(`#${id}`).addEventListener("change", renderListone);
+  ["list-search", "list-search-classic", "list-role", "list-availability", "list-sort"].forEach((id) => {
+    const el = $(`#${id}`);
+    if (!el) return;
+    el.addEventListener("input", renderListone);
+    el.addEventListener("change", renderListone);
+  });
+
+  $("#mantra-role-pills")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-mantra-role]");
+    if (!btn) return;
+    const role = btn.dataset.mantraRole;
+    mantraRoleFilter = mantraRoleFilter === role ? "" : role;
+    renderMantraRolePills();
+    renderListone();
   });
 
   $("#player-tbody").addEventListener("click", (e) => {
@@ -946,5 +1524,26 @@
     }
   });
 
+  // Mode switch
+  $$(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => switchMode(btn.dataset.mode));
+  });
+  document.body.dataset.mode = mode;
+  $$(".mode-btn").forEach((b) => b.classList.toggle("is-active", b.dataset.mode === mode));
+
+  // Banner under nav
+  const mainEl = document.querySelector("main");
+  if (mainEl && !$("#mode-banner")) {
+    const banner = document.createElement("p");
+    banner.id = "mode-banner";
+    banner.className = "mode-banner";
+    banner.textContent =
+      mode === "mantra"
+        ? "Modalità Mantra · 8 squadre · 30 slot liberi (senza suddivisione ruoli)"
+        : "Modalità Classic · 10 squadre · slot P · D · C · A";
+    mainEl.prepend(banner);
+  }
+
+  fillRoleFilter();
   renderAll();
 })();
